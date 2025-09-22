@@ -1,6 +1,8 @@
 import logging
 import random
+from decimal import Decimal
 
+from hummingbot.connector.connector_base import ConnectorBase
 from hummingbot.core.data_type.common import OrderType
 from hummingbot.core.rate_oracle.rate_oracle import RateOracle
 from hummingbot.strategy.script_strategy_base import ScriptStrategyBase
@@ -19,7 +21,7 @@ class SimpleOrder(ScriptStrategyBase):
     """
 
     # Key Parameters
-    exchange = "p2pb2b"
+    exchange = "ascend_ex"
     base = "GNEISS"
     quote = "USDT"
 
@@ -37,6 +39,11 @@ class SimpleOrder(ScriptStrategyBase):
     time_tracker = 0  # Tracks how much time has passed in seconds - limited to one hour at a time
     trade_times = []  # Determination of when within the hour to trade
 
+    def __init__(self, connectors: dict[str, ConnectorBase]):
+        super().__init__(connectors)
+
+        self.init_future_trades()
+
     def init_future_trades(self):
         # create a bucket range to increment by
         bucket_range = self.ONE_HOUR // self.TRADE_FREQUENCY_MINIMUM
@@ -46,7 +53,7 @@ class SimpleOrder(ScriptStrategyBase):
                 int(random.randint(i * bucket_range, (i + 1) * bucket_range))
             )
         self.trade_times = sorted(self.trade_times)
-        self.log_with_clock(logging.INFO, f"Trade times: {self.trade_times}")
+        self.logger().info(f"Trade times: {self.trade_times}")
 
     def should_trade(self):
         """
@@ -79,41 +86,49 @@ class SimpleOrder(ScriptStrategyBase):
             self.init_future_trades()
 
         if self.should_trade():
-            order_amount_usd = round(
-                random.uniform(
-                    self.TRADE_AMOUNT_USD_MINIMUM / self.TRADE_FREQUENCY_MINIMUM,
-                    self.TRADE_AMOUNT_USD_MAXIMUM / self.TRADE_FREQUENCY_MINIMUM
-                ), 2)  # Random amount of USDT to trade - lowest it can be is the min hourly trade amount after multiplying by the frequency
+            order_amount_usd = Decimal(
+                round(
+                    random.uniform(
+                        self.TRADE_AMOUNT_USD_MINIMUM / self.TRADE_FREQUENCY_MINIMUM,
+                        self.TRADE_AMOUNT_USD_MAXIMUM / self.TRADE_FREQUENCY_MINIMUM
+                    ), 2)
+            )
+            # Try RateOracle first, fallback to connector price
             conversion_rate = RateOracle.get_instance().get_pair_rate(f"{self.base}-USDT")
-            amount = order_amount_usd / conversion_rate
-            price = self.connectors[self.exchange].get_mid_price(f"{self.base}-{self.quote}")
+            if conversion_rate is None:
+                # Fallback to current market price
+                conversion_rate = self.connectors[self.exchange].get_mid_price(f"{self.base}-{self.quote}")
+                self.logger().warning(f"RateOracle returned None for {self.base}-USDT, using connector price: {conversion_rate}")
 
+            amount = order_amount_usd / conversion_rate
+
+            self.logger().info(f"Placing order: {amount} {self.base} at rate {conversion_rate} {self.quote} for {order_amount_usd} {self.quote}")
             self.place_order(amount)
-            self.trade_side ^= 1  # toggle trade side
-            self.log_with_clock(logging.INFO, f"Trade side flipped to: {'sell' if self.trade_side else 'buy'}")
+            self.trade_side ^= 1
+            self.logger().info(f"Trade side flipped to: {'sell' if self.trade_side else 'buy'}")
         self.time_tracker += 1
 
     def did_fill_order(self, event: OrderFilledEvent):
         msg = (f"{event.trade_type.name} {event.amount} of {event.trading_pair} {self.exchange} at {event.price}")
-        self.log_with_clock(logging.INFO, msg)
+        self.logger().info(msg)
         self.notify_hb_app_with_timestamp(msg)
 
     def did_complete_buy_order(self, event: BuyOrderCompletedEvent):
         msg = (f"Order {event.order_id} to buy {event.base_asset_amount} of {event.base_asset} is completed.")
-        self.log_with_clock(logging.INFO, msg)
+        self.logger().info(msg)
         self.notify_hb_app_with_timestamp(msg)
 
     def did_complete_sell_order(self, event: SellOrderCompletedEvent):
         msg = (f"Order {event.order_id} to sell {event.base_asset_amount} of {event.base_asset} is completed.")
-        self.log_with_clock(logging.INFO, msg)
+        self.logger().info(msg)
         self.notify_hb_app_with_timestamp(msg)
 
     def did_create_buy_order(self, event: BuyOrderCreatedEvent):
         msg = (f"Created BUY order {event.order_id}")
-        self.log_with_clock(logging.INFO, msg)
+        self.logger().info(msg)
         self.notify_hb_app_with_timestamp(msg)
 
     def did_create_sell_order(self, event: SellOrderCreatedEvent):
         msg = (f"Created SELL order {event.order_id}")
-        self.log_with_clock(logging.INFO, msg)
+        self.logger().info(msg)
         self.notify_hb_app_with_timestamp(msg)

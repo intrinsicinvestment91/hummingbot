@@ -68,7 +68,5 @@ class P2pb2bAuth(AuthBase):
         }
 
     def _generate_signature(self, payload: bytes) -> str:
-        self.logger().info(f"P2PB2B Auth - Signing: {payload}")
-        self.logger().info(f"Secret key: {self.secret_key}")
         digest = hmac.new(self.secret_key.encode("utf8"), payload, hashlib.sha512).hexdigest()
         return digest
