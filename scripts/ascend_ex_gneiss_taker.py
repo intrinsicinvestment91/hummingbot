@@ -95,12 +95,12 @@ class SimpleOrder(ScriptStrategyBase):
                         self.TRADE_AMOUNT_USD_MAXIMUM / self.TRADE_FREQUENCY_MINIMUM
                     ), 2)
             )
-            # Try RateOracle first, fallback to connector price
-            conversion_rate = RateOracle.get_instance().get_pair_rate(f"{self.base}-USDT")
-            if conversion_rate is None:
-                # Fallback to current market price
-                conversion_rate = self.connectors[self.exchange].get_mid_price(f"{self.base}-{self.quote}")
-                self.logger().warning(f"RateOracle returned None for {self.base}-USDT, using connector price: {conversion_rate}")
+            # # Try RateOracle first, fallback to connector price
+            # conversion_rate = RateOracle.get_instance().get_pair_rate(f"{self.base}-USDT")
+            # if conversion_rate is None:
+            # Fallback to current market price
+            conversion_rate = self.connectors[self.exchange].get_mid_price(f"{self.base}-{self.quote}")
+            self.logger().warning(f"RateOracle returned None for {self.base}-USDT, using connector price: {conversion_rate}")
 
             amount = order_amount_usd / conversion_rate
 
