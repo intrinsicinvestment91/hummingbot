@@ -61,21 +61,23 @@ class SimpleOrder(ScriptStrategyBase):
         """
         return any(abs(self.time_tracker - t) <= 1 for t in self.trade_times)
 
-    def place_order(self, amount):
+    def place_order(self, amount, price):
         # places order
         if self.trade_side:
             self.sell(
                 connector_name=self.exchange,
                 trading_pair=f"{self.base}-{self.quote}",
                 amount=amount,
-                order_type=OrderType.MARKET
+                order_type=OrderType.MARKET,
+                price=price
             )
         else:
             self.buy(
                 connector_name=self.exchange,
                 trading_pair=f"{self.base}-{self.quote}",
                 amount=amount,
-                order_type=OrderType.MARKET
+                order_type=OrderType.MARKET,
+                price=price
             )
         # remove the trade time that was just used
         self.trade_times.pop(0)
@@ -103,7 +105,7 @@ class SimpleOrder(ScriptStrategyBase):
             amount = order_amount_usd / conversion_rate
 
             self.logger().info(f"Placing order: {amount} {self.base} at rate {conversion_rate} {self.quote} for {order_amount_usd} {self.quote}")
-            self.place_order(amount)
+            self.place_order(amount, conversion_rate)
             self.trade_side ^= 1
             self.logger().info(f"Trade side flipped to: {'sell' if self.trade_side else 'buy'}")
         self.time_tracker += 1
