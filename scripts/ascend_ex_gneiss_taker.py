@@ -36,6 +36,8 @@ class SimpleOrder(ScriptStrategyBase):
     TRADE_AMOUNT_USD_MINIMUM = 1250  # 1250 USDT worth of trades per hour
     TRADE_AMOUNT_USD_MAXIMUM = 1500  # 1500 USDT worth of trades per hour
     TRADE_FREQUENCY_MINIMUM = 60  # 60 trades per hour
+    BUY_GUARDRAIL = 2  # Don't buy if the price is is more than 2 dollars
+    SELL_GUARDRAIL = 0.70  # Don't sell if the price is is less than 0.70 dollars
     time_tracker = 0  # Tracks how much time has passed in seconds - limited to one hour at a time
     trade_times = []  # Determination of when within the hour to trade
 
@@ -63,7 +65,7 @@ class SimpleOrder(ScriptStrategyBase):
 
     def place_order(self, amount, price):
         # places order
-        if self.trade_side:
+        if self.trade_side and price > self.SELL_GUARDRAIL:
             self.sell(
                 connector_name=self.exchange,
                 trading_pair=f"{self.base}-{self.quote}",
@@ -71,7 +73,7 @@ class SimpleOrder(ScriptStrategyBase):
                 order_type=OrderType.MARKET,
                 price=price
             )
-        else:
+        elif not self.trade_side and price < self.BUY_GUARDRAIL:
             self.buy(
                 connector_name=self.exchange,
                 trading_pair=f"{self.base}-{self.quote}",
