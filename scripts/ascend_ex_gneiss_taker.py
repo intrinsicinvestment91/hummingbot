@@ -65,22 +65,28 @@ class SimpleOrder(ScriptStrategyBase):
 
     def place_order(self, amount, price):
         # places order
-        if self.trade_side and price > self.SELL_GUARDRAIL:
-            self.sell(
-                connector_name=self.exchange,
-                trading_pair=f"{self.base}-{self.quote}",
-                amount=amount,
-                order_type=OrderType.MARKET,
-                price=price
-            )
-        elif not self.trade_side and price < self.BUY_GUARDRAIL:
-            self.buy(
-                connector_name=self.exchange,
-                trading_pair=f"{self.base}-{self.quote}",
-                amount=amount,
-                order_type=OrderType.MARKET,
-                price=price
-            )
+        if self.trade_side:
+            if price > self.SELL_GUARDRAIL:
+                self.sell(
+                    connector_name=self.exchange,
+                    trading_pair=f"{self.base}-{self.quote}",
+                    amount=amount,
+                    order_type=OrderType.MARKET,
+                    price=price
+                )
+            else:
+                self.logger().info(f"Sell guardrail not met for {self.base} at price {price}. Skipping trade.")
+        else:
+            if price < self.BUY_GUARDRAIL:
+                self.buy(
+                    connector_name=self.exchange,
+                    trading_pair=f"{self.base}-{self.quote}",
+                    amount=amount,
+                    order_type=OrderType.MARKET,
+                    price=price
+                )
+            else:
+                self.logger().info(f"Buy guardrail not met for {self.base} at price {price}. Skipping trade.")
         # remove the trade time that was just used
         self.trade_times.pop(0)
 
