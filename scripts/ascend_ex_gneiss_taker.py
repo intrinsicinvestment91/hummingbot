@@ -65,7 +65,7 @@ class SimpleOrder(ScriptStrategyBase):
         """
         Returns True if the current time tracker is within 1 second of any of the trade times
         """
-        return any(abs(self.time_tracker - t) <= 1 for t in self.trade_times)
+        return any(abs(self.time_tracker - t) <= self.TICK_INTERVAL for t in self.trade_times)
 
     def place_order(self, amount, price):
         # places order
