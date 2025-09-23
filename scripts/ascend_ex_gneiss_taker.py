@@ -41,6 +41,10 @@ class SimpleOrder(ScriptStrategyBase):
     time_tracker = 0  # Tracks how much time has passed in seconds - limited to one hour at a time
     trade_times = []  # Determination of when within the hour to trade
 
+    # Add tick control
+    TICK_INTERVAL = 5  # Check every 5 seconds instead of every 1 second
+    last_tick_time = 0
+
     def __init__(self, connectors: dict[str, ConnectorBase]):
         super().__init__(connectors)
 
@@ -91,6 +95,12 @@ class SimpleOrder(ScriptStrategyBase):
         self.trade_times.pop(0)
 
     def on_tick(self):
+        # Rate limit the ticks
+        current_time = self.current_timestamp
+        if current_time - self.last_tick_time < self.TICK_INTERVAL:
+            return
+        self.last_tick_time = current_time
+
         if self.time_tracker >= self.ONE_HOUR:
             self.time_tracker = 0
             self.init_future_trades()
@@ -116,7 +126,7 @@ class SimpleOrder(ScriptStrategyBase):
             self.place_order(amount, conversion_rate)
             self.trade_side ^= 1
             self.logger().info(f"Trade side flipped to: {'sell' if self.trade_side else 'buy'}")
-        self.time_tracker += 1
+        self.time_tracker += self.TICK_INTERVAL  # Increment by tick interval
 
     def did_fill_order(self, event: OrderFilledEvent):
         msg = (f"{event.trade_type.name} {event.amount} of {event.trading_pair} {self.exchange} at {event.price}")
