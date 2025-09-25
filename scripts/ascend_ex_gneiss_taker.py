@@ -30,7 +30,7 @@ class SimpleOrder(ScriptStrategyBase):
         exchange: {f"{base}-{quote}"}
     }
 
-    trade_side = 0  # 0 for buy, 1 for sell
+    trade_side = True  # True for buy, False for sell
 
     ONE_HOUR = 3600  # 1 hour in seconds
     TRADE_AMOUNT_USD_MINIMUM = 1250  # 1250 USDT worth of trades per hour
@@ -40,6 +40,8 @@ class SimpleOrder(ScriptStrategyBase):
     SELL_GUARDRAIL = 0.70  # Don't sell if the price is is less than 0.70 dollars
     time_tracker = 0  # Tracks how much time has passed in seconds - limited to one hour at a time
     trade_times = []  # Determination of when within the hour to trade
+
+    bullish_value = 0.52  # 52% bullish sentiment
 
     # Add tick control
     TICK_INTERVAL = 5  # Check every 5 seconds instead of every 1 second
@@ -61,6 +63,12 @@ class SimpleOrder(ScriptStrategyBase):
         self.trade_times = sorted(self.trade_times)
         self.logger().info(f"Trade times: {self.trade_times}")
 
+    def pick_trade_side(self):
+        """
+        Picks a trade side based on the bullish value
+        """
+        return random.random() < self.bullish_value
+
     def should_trade(self):
         """
         Returns True if the current time tracker is within 1 second of any of the trade times
@@ -70,17 +78,6 @@ class SimpleOrder(ScriptStrategyBase):
     def place_order(self, amount, price):
         # places order
         if self.trade_side:
-            if price > self.SELL_GUARDRAIL:
-                self.sell(
-                    connector_name=self.exchange,
-                    trading_pair=f"{self.base}-{self.quote}",
-                    amount=amount,
-                    order_type=OrderType.MARKET,
-                    price=price
-                )
-            else:
-                self.logger().info(f"Sell guardrail not met for {self.base} at price {price}. Skipping trade.")
-        else:
             if price < self.BUY_GUARDRAIL:
                 self.buy(
                     connector_name=self.exchange,
@@ -91,6 +88,19 @@ class SimpleOrder(ScriptStrategyBase):
                 )
             else:
                 self.logger().info(f"Buy guardrail not met for {self.base} at price {price}. Skipping trade.")
+
+        else:
+            # SELL
+            if price > self.SELL_GUARDRAIL:
+                self.sell(
+                    connector_name=self.exchange,
+                    trading_pair=f"{self.base}-{self.quote}",
+                    amount=amount,
+                    order_type=OrderType.MARKET,
+                    price=price
+                )
+            else:
+                self.logger().info(f"Sell guardrail not met for {self.base} at price {price}. Skipping trade.")
         # remove the trade time that was just used
         self.trade_times.pop(0)
 
@@ -124,8 +134,8 @@ class SimpleOrder(ScriptStrategyBase):
 
             self.logger().info(f"Placing order: {amount} {self.base} at rate {conversion_rate} {self.quote} for {order_amount_usd} {self.quote}")
             self.place_order(amount, conversion_rate)
-            self.trade_side ^= 1
-            self.logger().info(f"Trade side flipped to: {'sell' if self.trade_side else 'buy'}")
+            self.trade_side = self.pick_trade_side()
+            self.logger().info(f"Trade side flipped to: {'buy' if self.trade_side else 'sell'}")
         self.time_tracker += self.TICK_INTERVAL  # Increment by tick interval
 
     def did_fill_order(self, event: OrderFilledEvent):

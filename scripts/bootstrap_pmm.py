@@ -4,6 +4,7 @@ import random
 from decimal import Decimal
 from typing import Dict, List
 
+import yaml
 from pydantic import Field
 
 from hummingbot.client.config.config_data_types import BaseClientModel
@@ -51,19 +52,38 @@ class BootstrapPMM(ScriptStrategyBase):
         cls.markets = {config.exchange: {config.trading_pair}}
         cls.price_source = PriceType.LastTrade if config.price_type == "last" else PriceType.MidPrice
 
+    # @classmethod
+    # def load_config_from_file(cls, config_path: str) -> BootstrapPMMConfig:
+    #     """Load configuration from YAML file."""
+    #     with open(config_path, 'r') as file:
+    #         config_data = yaml.safe_load(file)
+    #     return BootstrapPMMConfig(**config_data)
+
     def __init__(self, connectors: Dict[str, ConnectorBase], config: BootstrapPMMConfig):
         super().__init__(connectors)
         self.config = config
+        self.logger().info(f"Loaded config: {self.config}")
 
-        # Create the initial proposal and place the orders
+        self.first_order_placed = False
+
+    def to_microseconds(self, timestamp: int) -> int:
+        return timestamp * 1000000
+
+    def place_initial_orders(self):
         proposal = self.create_initial_proposal()
         self.logger().info(f"Created initial proposal: {proposal}")
         orders_to_place = self.adjust_proposal_to_budget(proposal)
         self.logger().info(f"Adjusted proposal to budget: {orders_to_place}")
         self.place_orders(orders_to_place)
         self.logger().info(f"Placed initial orders!")
+        self.first_order_placed = True
 
     def on_tick(self):
+        # Create the initial proposal and place the orders
+        if not self.first_order_placed:
+            self.create_timestamp = self.current_timestamp + self.to_microseconds(self.config.order_evaluation_time)
+            self.place_initial_orders()
+
         # On each tick, we should evaluate the orders and replace the orders if necessary.
         if self.create_timestamp <= self.current_timestamp:
             orders_to_replace : List[LimitOrder] = self.evaluate_orders()
@@ -71,7 +91,7 @@ class BootstrapPMM(ScriptStrategyBase):
                 self.logger().info(f"Replacing {len(orders_to_replace)} orders")
                 self.logger().info(f"Orders to replace: {orders_to_replace}")
                 self.replace_orders(orders_to_replace)
-            self.create_timestamp = self.config.order_evaluation_time + self.current_timestamp
+            self.create_timestamp =  self.current_timestamp + self.to_microseconds(self.config.order_evaluation_time)
 
     def get_order_amount(self) -> Decimal:
         """
@@ -81,7 +101,7 @@ class BootstrapPMM(ScriptStrategyBase):
         if self.config.randomize_order_amount:
             ref_price = self.connectors[self.config.exchange].get_price_by_type(self.config.trading_pair, self.price_source)
             return Decimal(
-                random.uniform(self.config.random_order_floor, self.config.random_order_ceiling) / ref_price
+                random.uniform(float(self.config.random_order_floor), float(self.config.random_order_ceiling)) / float(ref_price)
             )
         return Decimal(self.config.order_amount)
 
@@ -92,11 +112,11 @@ class BootstrapPMM(ScriptStrategyBase):
         ref_price = self.connectors[self.config.exchange].get_price_by_type(self.config.trading_pair, self.price_source)
         if order_side == TradeType.BUY:
             return ref_price * Decimal(
-                1 - self.config.bid_spread * (level / self.config.levels)
+                1 - self.config.bid_spread * Decimal(level / self.config.levels)
             )
         else:  # SELL
             return ref_price * Decimal(
-                1 + self.config.ask_spread * (level / self.config.levels)
+                1 + self.config.ask_spread * Decimal(level / self.config.levels)
             )
 
     def create_initial_proposal(self) -> List[OrderCandidate]:
@@ -123,21 +143,21 @@ class BootstrapPMM(ScriptStrategyBase):
 
         return proposal
 
-    def create_new_candidate(self, order_id: str, order_side: TradeType) -> OrderCandidate:
+    def create_new_candidate(self, order_side: TradeType, level: int) -> OrderCandidate:
         """
         Create a new order candidate.
         """
         amount = self.get_order_amount()
-        ref_price = self.connectors[self.config.exchange].get_price_by_type(self.config.trading_pair, self.price_source)
-        level = self._order_lvl_tracker[order_id]
 
         if order_side == TradeType.BUY:
             price = self.calculate_order_price(TradeType.BUY, level)
         else:  # SELL
             price = self.calculate_order_price(TradeType.SELL, level)
 
-        return OrderCandidate(trading_pair=self.config.trading_pair, is_maker=True, order_type=OrderType.LIMIT,
-                              order_side=order_side, amount=amount, price=price)
+        candidate = OrderCandidate(trading_pair=self.config.trading_pair, is_maker=True, order_type=OrderType.LIMIT,
+                                   order_side=order_side, amount=amount, price=price)
+        candidate.level = level
+        return candidate
 
     def adjust_proposal_to_budget(self, proposal: List[OrderCandidate]) -> List[OrderCandidate]:
         """
@@ -176,13 +196,13 @@ class BootstrapPMM(ScriptStrategyBase):
         orders = self.get_active_orders(connector_name=self.config.exchange)
         orders_to_replace = []
         for order in orders:
-            if order.order_side == TradeType.SELL:
+            if order.is_buy:
                 if order.price > self.connectors[self.config.exchange].get_price_by_type(
-                            order.trading_pair, self.price_source) * Decimal(1 + self.config.order_spread_tolerance):
+                            order.trading_pair, self.price_source) * Decimal(1 - self.config.order_spread_tolerance):
                     orders_to_replace.append(order)
-            else:  # BUY
+            else:  # SELL
                 if order.price < self.connectors[self.config.exchange].get_price_by_type(
-                        order.trading_pair, self.price_source) * Decimal(1 - self.config.order_spread_tolerance):
+                        order.trading_pair, self.price_source) * Decimal(1 + self.config.order_spread_tolerance):
                     orders_to_replace.append(order)
         return orders_to_replace
 
@@ -204,20 +224,21 @@ class BootstrapPMM(ScriptStrategyBase):
             order: LimitOrder | OrderFilledEvent: The order to replace.
         """
         order_id = order.client_order_id if isinstance(order, LimitOrder) else order.order_id
-        order_side = order.order_side if isinstance(order, LimitOrder) else order.trade_type
-        amount = order.amount
+        order_side = (TradeType.BUY if order.is_buy else TradeType.SELL) if isinstance(order, LimitOrder) else order.trade_type
+        amount = order.quantity if isinstance(order, LimitOrder) else order.amount
         trading_pair = order.trading_pair
         price = order.price
+        level = self._order_lvl_tracker[order_id]
 
         self.logger().info(f"Replacing LimitOrder(id={order_id}, side={order_side}, amount={amount}, price={price})")
         if isinstance(order, LimitOrder):  # Cancel only if the order hasn't been filled
             self.cancel(self.config.exchange, trading_pair, order_id)
+        # Remove old order from level tracker
+        del self._order_lvl_tracker[order_id]
 
-        candidate = self.create_new_candidate(order_id, order_side)
+        candidate = self.create_new_candidate(order_side, level)
         adj_candidate = self.adjust_candidate_to_budget(candidate)
         self.place_order(connector_name=self.config.exchange, order=adj_candidate)
-        # Remove old order from level tracker
-        self._order_lvl_tracker.pop(order_id)
 
     def place_orders(self, proposal: List[OrderCandidate]) -> None:
         """
@@ -257,13 +278,6 @@ class BootstrapPMM(ScriptStrategyBase):
             order_id = self.buy(connector_name=connector_name, trading_pair=order.trading_pair,
                                 amount=order.amount, order_type=order.order_type, price=order.price)
             self._order_lvl_tracker[order_id] = order.level
-
-    def cancel(self, connector_name: str, trading_pair: str, order_id: str):
-        """
-        Cancel the order. Overrides the parent class method to remove the order from the level tracker.
-        """
-        super().cancel(connector_name, trading_pair, order_id)
-        self._order_lvl_tracker.pop(order_id)
 
     def cancel_all_orders(self):
         """
