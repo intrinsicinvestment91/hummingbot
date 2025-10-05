@@ -57,13 +57,6 @@ class BootstrapPMM(ScriptStrategyBase):
         cls.markets = {config.exchange: {config.trading_pair}}
         cls.price_source = PriceType.LastTrade if config.price_type == "last" else PriceType.MidPrice
 
-    # @classmethod
-    # def load_config_from_file(cls, config_path: str) -> BootstrapPMMConfig:
-    #     """Load configuration from YAML file."""
-    #     with open(config_path, 'r') as file:
-    #         config_data = yaml.safe_load(file)
-    #     return BootstrapPMMConfig(**config_data)
-
     def __init__(self, connectors: Dict[str, ConnectorBase], config: BootstrapPMMConfig):
         super().__init__(connectors)
         self.config = config
@@ -232,7 +225,7 @@ class BootstrapPMM(ScriptStrategyBase):
         for order in proposal:
             await self.replace_order(order)
             # Delay between orders
-            asyncio.sleep(self.config.replacement_delay)
+            await asyncio.sleep(self.config.replacement_delay)
 
     async def replace_order(self, order: LimitOrder | OrderFilledEvent) -> None:
         """
@@ -310,4 +303,4 @@ class BootstrapPMM(ScriptStrategyBase):
         self.notify_hb_app_with_timestamp(msg)
 
         # replace order
-        self.replace_order(event)
+        asyncio.create_task(self.replace_order(event))
