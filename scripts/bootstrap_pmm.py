@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import random
@@ -28,6 +29,9 @@ class BootstrapPMMConfig(BaseClientModel):
     order_spread_tolerance: Decimal = Field(0.001)
     levels: int = Field(3)
     randomize_order_amount: bool = Field(False)
+    replace_all_every_increment: bool = Field(False)  # Turn on replace all orders ever n seconds
+    replacement_increment : Decimal = Field(10.0)  # Amount in seconds to have all orders be replaced.
+    replacement_delay : Decimal = Field(1.5)  # Amount of time to wait between replacing each order
     random_order_floor: Decimal = Field(1)  # in quote currency (USDT)
     random_order_ceiling: Decimal = Field(2)  # in quote currency (USDT)
 
@@ -43,7 +47,8 @@ class BootstrapPMM(ScriptStrategyBase):
     This ensures that there is always liquidity in the market.
     """
 
-    create_timestamp = 0
+    eval_target_timestamp = 0
+    repl_target_timestamp = 0
     price_source = PriceType.MidPrice
     _order_lvl_tracker = {}
 
@@ -78,20 +83,31 @@ class BootstrapPMM(ScriptStrategyBase):
         self.logger().info(f"Placed initial orders!")
         self.first_order_placed = True
 
-    def on_tick(self):
+    async def on_tick(self):
         # Create the initial proposal and place the orders
         if not self.first_order_placed:
-            self.create_timestamp = self.current_timestamp + self.to_microseconds(self.config.order_evaluation_time)
+            self.eval_target_timestamp = self.current_timestamp + self.to_microseconds(self.config.order_evaluation_time)
             self.place_initial_orders()
 
         # On each tick, we should evaluate the orders and replace the orders if necessary.
-        if self.create_timestamp <= self.current_timestamp:
+        if self.eval_target_timestamp <= self.current_timestamp:
             orders_to_replace : List[LimitOrder] = self.evaluate_orders()
             if orders_to_replace:
                 self.logger().info(f"Replacing {len(orders_to_replace)} orders")
                 self.logger().info(f"Orders to replace: {orders_to_replace}")
-                self.replace_orders(orders_to_replace)
-            self.create_timestamp =  self.current_timestamp + self.to_microseconds(self.config.order_evaluation_time)
+                await self.replace_orders(orders_to_replace)
+            self.eval_target_timestamp =  self.current_timestamp + self.to_microseconds(self.config.order_evaluation_time)
+
+        # On each tick, we should check if replacement_increment has passed
+        if self.repl_target_timestamp <= self.current_timestamp and self.config.replace_all_every_increment:
+            # Replace all orders if so
+            self.logger().info("Replacing all orders!")
+            await self.replace_orders(
+                self.get_active_orders(
+                    connector_name=self.config.exchange
+                )
+            )
+            self.repl_target_timestamp = self.current_timestamp + self.to_microseconds(self.config.replacement_increment)
 
     def get_order_amount(self) -> Decimal:
         """
@@ -206,7 +222,7 @@ class BootstrapPMM(ScriptStrategyBase):
                     orders_to_replace.append(order)
         return orders_to_replace
 
-    def replace_orders(self, proposal: List[LimitOrder]) -> None:
+    async def replace_orders(self, proposal: List[LimitOrder]) -> None:
         """
         Replace the orders in the proposal with new orders.
 
@@ -214,9 +230,11 @@ class BootstrapPMM(ScriptStrategyBase):
             proposal: List[LimitOrder]: A list of orders to replace.
         """
         for order in proposal:
-            self.replace_order(order)
+            await self.replace_order(order)
+            # Delay between orders
+            asyncio.sleep(self.config.replacement_delay)
 
-    def replace_order(self, order: LimitOrder | OrderFilledEvent) -> None:
+    async def replace_order(self, order: LimitOrder | OrderFilledEvent) -> None:
         """
         Replace the order with a new order.
 
