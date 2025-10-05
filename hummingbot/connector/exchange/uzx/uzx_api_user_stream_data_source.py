@@ -87,6 +87,6 @@ class UzxAPIUserStreamDataSource(UserStreamTrackerDataSource):
             data = ws_response.data
             if "ping" in data:
                 pong_request = WSJSONRequest(payload={"pong" : data["ping"]})
-                 await websocket_assistant.send(request=pong_request)
+                await websocket_assistant.send(request=pong_request)
             else:
                 queue.put_nowait(data)
