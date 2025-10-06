@@ -67,7 +67,7 @@ class BootstrapPMM(ScriptStrategyBase):
         self.first_order_placed = False
 
     def to_microseconds(self, timestamp: int) -> int:
-        return timestamp * 1000000
+        return int(timestamp * 1000000)
 
     def is_order_out_of_desired_price(self, order: LimitOrder) -> bool:
         return order.price < self.config.price_floor or order.price > self.config.price_ceiling
