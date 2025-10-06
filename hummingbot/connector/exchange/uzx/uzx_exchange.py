@@ -302,28 +302,28 @@ class UzxExchange(ExchangePyBase):
                     )
                     self._order_tracker.process_order_update(order_update=order_update)
 
-                    if "filled_quote_amount" in order_data and Decimal(order_data.get("filled_quote_amount", 0)) > 0:
+                    if "filled_amount" in order_data and Decimal(order_data.get("filled_amount", 0)) > 0:
                         # Extract fee information from the message
                         fee = TradeFeeBase.new_spot_fee(
                             fee_schema=self.trade_fee_schema(),
                             trade_type=tracked_order.trade_type,
                             percent_token=tracked_order.quote_asset,
                             flat_fees=[TokenAmount(
-                                amount=Decimal(order_data.get("deal_fee", 0)),
+                                amount=Decimal(order_data.get("maker_fee", 0)),
                                 token=tracked_order.quote_asset
                             )]
                         )
-                        self.logger().info(f"DEBUGGING: Trade update: {order_data}")
-                        if order_data.get("avg_price") is not None:
+                        self.logger().info(f"DEBUGGING: Trade update: {order_data.get('filled_amount')}")
+                        if order_data.get("price") is not None:
                             trade_update = TradeUpdate(
-                                trade_id=str(order_data.get(order_data["order_id"])),
+                                trade_id=str(order_data.get("order_id")),
                                 client_order_id=tracked_order.client_order_id,
-                                exchange_order_id=str(order_data["order_id"]),
+                                exchange_order_id=tracked_order.exchange_order_id,
                                 trading_pair=tracked_order.trading_pair,
                                 fee=fee,
-                                fill_base_amount=Decimal(order_data.get("filled_quote_amount")) / Decimal(order_data.get("avg_price")),
+                                fill_base_amount=Decimal(order_data.get("filled_amount")),
                                 fill_quote_amount=Decimal(order_data.get("filled_quote_amount")),
-                                fill_price=Decimal(order_data.get("avg_price")),
+                                fill_price=Decimal(order_data.get("price")),
                                 fill_timestamp=order_data.get("updated_at", order_data.get("created_at")),
                             )
                             self._order_tracker.process_trade_update(trade_update)
