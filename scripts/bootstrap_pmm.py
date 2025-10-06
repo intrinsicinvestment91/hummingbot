@@ -9,11 +9,13 @@ import yaml
 from pydantic import Field
 
 from hummingbot.client.config.config_data_types import BaseClientModel
+from hummingbot.client.hummingbot_application import HummingbotApplication
 from hummingbot.connector.connector_base import ConnectorBase
 from hummingbot.core.data_type.common import OrderType, PriceType, TradeType
 from hummingbot.core.data_type.limit_order import LimitOrder
 from hummingbot.core.data_type.order_candidate import OrderCandidate
 from hummingbot.core.event.events import OrderFilledEvent
+from hummingbot.logger.email_warning import send_email_critical_issue
 from hummingbot.strategy.script_strategy_base import ScriptStrategyBase
 
 
@@ -34,6 +36,8 @@ class BootstrapPMMConfig(BaseClientModel):
     replacement_delay : Decimal = Field(1.5)  # Amount of time to wait between replacing each order
     random_order_floor: Decimal = Field(1)  # in quote currency (USDT)
     random_order_ceiling: Decimal = Field(2)  # in quote currency (USDT)
+    price_ceiling: Decimal = Field(2.0)
+    price_floor: Decimal = Field(0.5)
 
 
 class BootstrapPMM(ScriptStrategyBase):
@@ -66,6 +70,9 @@ class BootstrapPMM(ScriptStrategyBase):
 
     def to_microseconds(self, timestamp: int) -> int:
         return timestamp * 1000000
+
+    def is_order_out_of_desired_price(self, order: LimitOrder) -> bool:
+        return order.price < self.config.price_floor or order.price > self.config.price_ceiling
 
     def place_initial_orders(self):
         proposal = self.create_initial_proposal()
@@ -138,16 +145,8 @@ class BootstrapPMM(ScriptStrategyBase):
         ref_price = self.connectors[self.config.exchange].get_price_by_type(self.config.trading_pair, self.price_source)
         proposal = []
         for level in range(1, self.config.levels + 1):
-            buy_amount = self.get_order_amount()
-            sell_amount = self.get_order_amount()
-            buy_price = self.calculate_order_price(TradeType.BUY, level)
-            sell_price = self.calculate_order_price(TradeType.SELL, level)
-            buy_order = OrderCandidate(trading_pair=self.config.trading_pair, is_maker=True, order_type=OrderType.LIMIT,
-                                       order_side=TradeType.BUY, amount=Decimal(buy_amount), price=buy_price)
-            sell_order = OrderCandidate(trading_pair=self.config.trading_pair, is_maker=True, order_type=OrderType.LIMIT,
-                                        order_side=TradeType.SELL, amount=Decimal(sell_amount), price=sell_price)
-            buy_order.level = level
-            sell_order.level = level
+            buy_order = self.create_new_candidate(TradeType.BUY, level)
+            sell_order = self.create_new_candidate(TradeType.SELL, level)
             proposal.extend([buy_order, sell_order])
 
         return proposal
@@ -275,6 +274,13 @@ class BootstrapPMM(ScriptStrategyBase):
             order: OrderCandidate: The order to place.
         """
         self.logger().info(f"Placing order: OrderCandidate(side={order.order_side}, amount={order.amount}, price={order.price})")
+        if not self.is_order_out_of_desired_price(order):
+            self.logger().warning(f"Order is out of desired price range, stopping market making.")
+            send_email_critical_issue(
+                f"Bootstrap PMM - {self.config.exchange} - {self.config.trading_pair} - Out of desired price range",
+                f"Order is out of desired price range, stopping market making.")
+            self.stop()
+            return
         if order.is_zero_order:
             self.logger().warning(f"Order is a zero order. Check balances. Insufficient funds likely.")
             return
@@ -298,9 +304,19 @@ class BootstrapPMM(ScriptStrategyBase):
             self.cancel(self.config.exchange, order.trading_pair, order.client_order_id)
 
     def did_fill_order(self, event: OrderFilledEvent):
+        """
+        Handle the order filled event. This will replace the order.
+        """
         msg = (f"{event.trade_type.name} {round(event.amount, 2)} {event.trading_pair} {self.config.exchange} at {round(event.price, 2)}")
         self.log_with_clock(logging.INFO, msg)
         self.notify_hb_app_with_timestamp(msg)
 
         # replace order
         asyncio.create_task(self.replace_order(event))
+
+    def stop(self):
+        """
+        Shutdown hummingbot.
+        """
+
+        HummingbotApplication.main_application().stop()
