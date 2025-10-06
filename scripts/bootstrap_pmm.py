@@ -100,9 +100,9 @@ class BootstrapPMM(ScriptStrategyBase):
             # Replace all orders if so
             self.logger().info("Replacing all orders!")
             self._replace_orders_with_delay(
-                self.get_active_orders(
+                sorted(self.get_active_orders(  # Sort so buys are ascending and sells are descending by price
                     connector_name=self.config.exchange
-                )
+                ), key=lambda o: o.price if o.is_buy else -o.price)
             )
             self.repl_target_timestamp = self.current_timestamp + self.config.replacement_increment
 
@@ -268,7 +268,7 @@ class BootstrapPMM(ScriptStrategyBase):
             if not self.place_order(connector_name=self.config.exchange, order=order):
                 break
 
-    def place_order(self, connector_name: str, order: OrderCandidate) -> None | bool:
+    def place_order(self, connector_name: str, order: OrderCandidate) -> bool:
         """
         Place the order. This does not replace the order, but simply places it.
 
