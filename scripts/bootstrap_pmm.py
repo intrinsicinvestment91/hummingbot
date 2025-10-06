@@ -26,13 +26,13 @@ class BootstrapPMMConfig(BaseClientModel):
     order_amount: Decimal = Field(0.01)
     bid_spread: Decimal = Field(0.001)
     ask_spread: Decimal = Field(0.001)
-    order_evaluation_time: Decimal = Field(15.0)
+    order_evaluation_time: float = Field(15.0)
     price_type: str = Field("mid")
     order_spread_tolerance: Decimal = Field(0.001)
     levels: int = Field(3)
     randomize_order_amount: bool = Field(False)
     replace_all_every_increment: bool = Field(False)  # Turn on replace all orders ever n seconds
-    replacement_increment : Decimal = Field(10.0)  # Amount in seconds to have all orders be replaced.
+    replacement_increment : float = Field(10.0)  # Amount in seconds to have all orders be replaced.
     replacement_delay : Decimal = Field(1.5)  # Amount of time to wait between replacing each order
     random_order_floor: Decimal = Field(1)  # in quote currency (USDT)
     random_order_ceiling: Decimal = Field(2)  # in quote currency (USDT)
