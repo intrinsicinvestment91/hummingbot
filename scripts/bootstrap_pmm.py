@@ -83,7 +83,7 @@ class BootstrapPMM(ScriptStrategyBase):
         self.logger().info(f"Placed initial orders!")
         self.first_order_placed = True
 
-    async def on_tick(self):
+    def on_tick(self):
         # Create the initial proposal and place the orders
         if not self.first_order_placed:
             self.eval_target_timestamp = self.current_timestamp + self.to_microseconds(self.config.order_evaluation_time)
@@ -95,14 +95,14 @@ class BootstrapPMM(ScriptStrategyBase):
             if orders_to_replace:
                 self.logger().info(f"Replacing {len(orders_to_replace)} orders")
                 self.logger().info(f"Orders to replace: {orders_to_replace}")
-                await self.replace_orders(orders_to_replace)
+                self._replace_orders_with_delay(orders_to_replace)
             self.eval_target_timestamp =  self.current_timestamp + self.to_microseconds(self.config.order_evaluation_time)
 
         # On each tick, we should check if replacement_increment has passed
         if self.repl_target_timestamp <= self.current_timestamp and self.config.replace_all_every_increment:
             # Replace all orders if so
             self.logger().info("Replacing all orders!")
-            await self.replace_orders(
+            self._replace_orders_with_delay(
                 self.get_active_orders(
                     connector_name=self.config.exchange
                 )
@@ -213,6 +213,13 @@ class BootstrapPMM(ScriptStrategyBase):
                         order.trading_pair, self.price_source) * Decimal(1 + self.config.order_spread_tolerance):
                     orders_to_replace.append(order)
         return orders_to_replace
+
+    def _replace_orders_with_delay(self, proposal: List[LimitOrder]) -> None:
+        """
+        Replace the orders in the proposal with new orders.
+        """
+        for order in proposal:
+            asyncio.create_task(self.replace_order(order))
 
     async def replace_orders(self, proposal: List[LimitOrder]) -> None:
         """
