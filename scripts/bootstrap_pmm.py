@@ -94,18 +94,18 @@ class BootstrapPMM(ScriptStrategyBase):
             if orders_to_replace:
                 self.logger().info(f"Replacing {len(orders_to_replace)} orders")
                 self.logger().info(f"Orders to replace: {orders_to_replace}")
-                asyncio.create_task(self._replace_orders_with_delay(orders_to_replace))
+                self._replace_orders_with_delay(orders_to_replace)
             self.eval_target_timestamp =  self.current_timestamp + self.to_microseconds(self.config.order_evaluation_time)
 
         # On each tick, we should check if replacement_increment has passed
         if self.repl_target_timestamp <= self.current_timestamp and self.config.replace_all_every_increment:
             # Replace all orders if so
             self.logger().info("Replacing all orders!")
-            asyncio.create_task(self._replace_orders_with_delay(
+            self._replace_orders_with_delay(
                 self.get_active_orders(
                     connector_name=self.config.exchange
                 )
-            ))
+            )
             self.repl_target_timestamp = self.current_timestamp + self.to_microseconds(self.config.replacement_increment)
 
     def get_order_amount(self) -> Decimal:
