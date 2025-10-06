@@ -1,13 +1,14 @@
 import logging
 import os
 import smtplib
+import traceback
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import List
 
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ def load_email_list(file_path: str = "emails.txt") -> List[str]:
     return emails
 
 
-def send_deployment_email(
+def send_email(
     subject: str,
     body: str,
     email_list_file: str = "emails.txt"
@@ -75,6 +76,7 @@ def send_deployment_email(
         return True
 
     except Exception as e:
+        logger.error(traceback.format_exc())
         logger.error(f"Failed to send email: {str(e)}")
         return False
 

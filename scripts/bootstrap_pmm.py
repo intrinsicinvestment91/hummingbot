@@ -276,9 +276,10 @@ class BootstrapPMM(ScriptStrategyBase):
         self.logger().info(f"Placing order: OrderCandidate(side={order.order_side}, amount={order.amount}, price={order.price})")
         if not self.is_order_out_of_desired_price(order):
             self.logger().warning(f"Order is out of desired price range, stopping market making.")
-            send_email_critical_issue(
-                f"Bootstrap PMM - {self.config.exchange} - {self.config.trading_pair} - Out of desired price range",
-                f"Order is out of desired price range, stopping market making.")
+            # TODO: Uncomment this when our smtp server is set up
+            # send_email_critical_issue(
+            #     f"Bootstrap PMM - {self.config.exchange} - {self.config.trading_pair} - Out of desired price range",
+            #     f"Order is out of desired price range, stopping market making.")
             self.stop()
             return
         if order.is_zero_order:
