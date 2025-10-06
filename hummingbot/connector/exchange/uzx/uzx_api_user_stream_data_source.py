@@ -37,6 +37,7 @@ class UzxAPIUserStreamDataSource(UserStreamTrackerDataSource):
         self._last_listen_key_ping_ts = None
         self._manage_listen_key_task = None
         self._listen_key_initialized_event = asyncio.Event()
+        self._trading_pairs = trading_pairs
 
     async def _get_ws_assistant(self) -> WSAssistant:
         """
