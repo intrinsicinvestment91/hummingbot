@@ -97,4 +97,9 @@ coverage.xml
 
 **/.claude/settings.local.json
 
-emails.txt
+# dev only
+env/
+.vscode/
+.venv/
+.pytest_cache/
+__pycache__/
