@@ -60,7 +60,7 @@ class UzxAPIUserStreamDataSource(UserStreamTrackerDataSource):
         await ws.send(login_request)
         response = await ws.receive()
         self.logger().info(f"DEBUGGING: Response: {response}")
-        if response.get("status") == "ok":
+        if response.get("status") == "success":
             self.logger().info("Successfully connected to user stream")
             return ws
         else:
