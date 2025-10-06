@@ -300,6 +300,8 @@ class BootstrapPMM(ScriptStrategyBase):
                                 amount=order.amount, order_type=order.order_type, price=order.price)
             self._order_lvl_tracker[order_id] = order.level
 
+        return True
+
     def cancel_all_orders(self):
         """
         Cancel all orders. This does not replace the orders, but simply cancels them.
