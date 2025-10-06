@@ -282,7 +282,7 @@ class BootstrapPMM(ScriptStrategyBase):
             # send_email_critical_issue(
             #     f"Bootstrap PMM - {self.config.exchange} - {self.config.trading_pair} - Out of desired price range",
             #     f"Order is out of desired price range, stopping market making.")
-            self.stop()
+            HummingbotApplication.main_application().stop()
             return
         if order.is_zero_order:
             self.logger().warning(f"Order is a zero order. Check balances. Insufficient funds likely.")
