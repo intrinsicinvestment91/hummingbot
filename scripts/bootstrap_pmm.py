@@ -214,8 +214,7 @@ class BootstrapPMM(ScriptStrategyBase):
         """
         Replace the orders in the proposal with new orders.
         """
-        for order in proposal:
-            asyncio.create_task(self.replace_order(order))
+        asyncio.create_task(self.replace_orders(proposal))
 
     async def replace_orders(self, proposal: List[LimitOrder]) -> None:
         """
@@ -225,11 +224,11 @@ class BootstrapPMM(ScriptStrategyBase):
             proposal: List[LimitOrder]: A list of orders to replace.
         """
         for order in proposal:
-            await self.replace_order(order)
+            self.replace_order(order)
             # Delay between orders
             await asyncio.sleep(self.config.replacement_delay)
 
-    async def replace_order(self, order: LimitOrder | OrderFilledEvent) -> None:
+    def replace_order(self, order: LimitOrder | OrderFilledEvent) -> None:
         """
         Replace the order with a new order.
 
