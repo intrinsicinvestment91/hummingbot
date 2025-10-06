@@ -26,7 +26,7 @@ class BootstrapPMMConfig(BaseClientModel):
     order_amount: Decimal = Field(0.01)
     bid_spread: Decimal = Field(0.001)
     ask_spread: Decimal = Field(0.001)
-    order_evaluation_time: int = Field(15)
+    order_evaluation_time: Decimal = Field(15.0)
     price_type: str = Field("mid")
     order_spread_tolerance: Decimal = Field(0.001)
     levels: int = Field(3)
@@ -66,9 +66,6 @@ class BootstrapPMM(ScriptStrategyBase):
 
         self.first_order_placed = False
 
-    def to_microseconds(self, timestamp: int) -> int:
-        return int(timestamp * 1000000)
-
     def is_order_out_of_desired_price(self, order: LimitOrder) -> bool:
         return order.price < self.config.price_floor or order.price > self.config.price_ceiling
 
@@ -84,8 +81,8 @@ class BootstrapPMM(ScriptStrategyBase):
     def on_tick(self):
         # Create the initial proposal and place the orders
         if not self.first_order_placed:
-            self.eval_target_timestamp = self.current_timestamp + self.to_microseconds(self.config.order_evaluation_time)
-            self.repl_target_timestamp = self.current_timestamp + self.to_microseconds(self.config.replacement_increment)
+            self.eval_target_timestamp = self.current_timestamp + self.config.order_evaluation_time
+            self.repl_target_timestamp = self.current_timestamp + self.config.replacement_increment
             self.place_initial_orders()
 
         # On each tick, we should evaluate the orders and replace the orders if necessary.
@@ -95,7 +92,7 @@ class BootstrapPMM(ScriptStrategyBase):
                 self.logger().info(f"Replacing {len(orders_to_replace)} orders")
                 self.logger().info(f"Orders to replace: {orders_to_replace}")
                 self._replace_orders_with_delay(orders_to_replace)
-            self.eval_target_timestamp =  self.current_timestamp + self.to_microseconds(self.config.order_evaluation_time)
+            self.eval_target_timestamp =  self.current_timestamp + self.config.order_evaluation_time
 
         # On each tick, we should check if replacement_increment has passed
         if self.repl_target_timestamp <= self.current_timestamp and self.config.replace_all_every_increment:
@@ -106,7 +103,7 @@ class BootstrapPMM(ScriptStrategyBase):
                     connector_name=self.config.exchange
                 )
             )
-            self.repl_target_timestamp = self.current_timestamp + self.to_microseconds(self.config.replacement_increment)
+            self.repl_target_timestamp = self.current_timestamp + self.config.replacement_increment
 
     def get_order_amount(self) -> Decimal:
         """
