@@ -265,9 +265,10 @@ class BootstrapPMM(ScriptStrategyBase):
             self.logger().warning(f"Some orders have been resized. Check balances. Insufficient funds likely.")
 
         for order in proposal:
-            self.place_order(connector_name=self.config.exchange, order=order)
+            if not self.place_order(connector_name=self.config.exchange, order=order):
+                break
 
-    def place_order(self, connector_name: str, order: OrderCandidate):
+    def place_order(self, connector_name: str, order: OrderCandidate) -> None | bool:
         """
         Place the order. This does not replace the order, but simply places it.
 
@@ -283,10 +284,10 @@ class BootstrapPMM(ScriptStrategyBase):
             #     f"Bootstrap PMM - {self.config.exchange} - {self.config.trading_pair} - Out of desired price range",
             #     f"Order is out of desired price range, stopping market making.")
             HummingbotApplication.main_application().stop()
-            return
+            return False
         if order.is_zero_order:
             self.logger().warning(f"Order is a zero order. Check balances. Insufficient funds likely.")
-            return
+            return False
         elif order.resized:
             self.logger().warning(f"Order has been resized to fit budget. Check balances. Insufficient funds likely.")
 
