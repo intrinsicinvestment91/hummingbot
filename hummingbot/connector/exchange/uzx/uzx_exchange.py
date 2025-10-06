@@ -444,3 +444,13 @@ class UzxExchange(ExchangePyBase):
         )
 
         return float(resp_json["data"]["close"])
+
+    async def cancel_all(self, timeout_seconds: float) -> List[CancellationResult]:
+        """
+        Cancels all currently active orders. The cancellations are performed in parallel tasks.
+
+        :param timeout_seconds: the maximum time (in seconds) the cancel logic should run
+
+        :return: a list of CancellationResult instances, one for each of the orders to be cancelled
+        """
+        return await super().cancel_all(CONSTANTS.CANCEL_ALL_TIMEOUT)
