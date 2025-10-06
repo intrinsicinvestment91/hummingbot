@@ -27,6 +27,7 @@ class BootstrapPMMConfig(BaseClientModel):
     bid_spread: Decimal = Field(0.001)
     ask_spread: Decimal = Field(0.001)
     order_evaluation_time: float = Field(15.0)
+    force_evaluation_cycle: bool = Field(False)
     price_type: str = Field("mid")
     order_spread_tolerance: Decimal = Field(0.001)
     levels: int = Field(3)
@@ -85,8 +86,8 @@ class BootstrapPMM(ScriptStrategyBase):
             self.repl_target_timestamp = self.current_timestamp + self.config.replacement_increment
             self.place_initial_orders()
 
-        # On each tick, we should evaluate the orders and replace the orders if necessary.
-        if self.eval_target_timestamp <= self.current_timestamp:
+        # On each tick, we should evaluate the orders and replace the orders if necessary. Do not run if we are replacing all orders every increment unless force_evaluation_cycle is True.
+        if self.eval_target_timestamp <= self.current_timestamp and (self.config.force_evaluation_cycle or not self.config.replace_all_every_increment):
             orders_to_replace : List[LimitOrder] = self.evaluate_orders()
             if orders_to_replace:
                 self.logger().info(f"Replacing {len(orders_to_replace)} orders")
