@@ -287,12 +287,11 @@ class UzxExchange(ExchangePyBase):
 
             try:
                 event_type = event_message.get("type")
-                if event_type == "orderV2.spot" :
-                 order_data = event_message["data"]
-                 if order_data.get("state") is not None:
+                if event_type == "order.spot" :
+                 order_data = event_message.get("data")
+                 if order_data and order_data.get("state") is not None:
                   tracked_order = self._order_tracker.all_updatable_orders_by_exchange_order_id.get(str(order_data["order_id"]))
                   if tracked_order is not None:
-                    order_data = event_message["data"]
                     order_update = OrderUpdate(
                         trading_pair=tracked_order.trading_pair,
                         update_timestamp=order_data["updated_at"] if order_data["updated_at"] else order_data["created_at"],
@@ -301,12 +300,6 @@ class UzxExchange(ExchangePyBase):
                         exchange_order_id=str(order_data["order_id"]),
                     )
                     self._order_tracker.process_order_update(order_update=order_update)
-
-                elif event_type == "tradingV2.assets" and event_message["account_type"] == 1:
-                    asset_name = event_message["name"]
-                    balance_entry = event_message["data"]
-                    free_balance = Decimal(balance_entry["balance"])
-                    self._account_available_balances[asset_name] = free_balance
 
             except asyncio.CancelledError:
                 raise

@@ -58,10 +58,9 @@ class UzxAuth(AuthBase):
 
     async def ws_authenticate(self, request: WSRequest) -> WSRequest:
         """
-        This method is intended to configure a websocket request to be authenticated. Uzx does not use this
-        functionality
+        This method is intended to configure a websocket request to be authenticated.
         """
-        return request  # pass-through
+        request.payload = self.get_ws_authenticate_payload(request.url)
 
     def header_for_authentication(self, request) -> Dict[str, str]:
 
