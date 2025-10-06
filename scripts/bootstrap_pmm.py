@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import random
@@ -8,11 +9,13 @@ import yaml
 from pydantic import Field
 
 from hummingbot.client.config.config_data_types import BaseClientModel
+from hummingbot.client.hummingbot_application import HummingbotApplication
 from hummingbot.connector.connector_base import ConnectorBase
 from hummingbot.core.data_type.common import OrderType, PriceType, TradeType
 from hummingbot.core.data_type.limit_order import LimitOrder
 from hummingbot.core.data_type.order_candidate import OrderCandidate
 from hummingbot.core.event.events import OrderFilledEvent
+from hummingbot.logger.email_warning import send_email_critical_issue
 from hummingbot.strategy.script_strategy_base import ScriptStrategyBase
 
 
@@ -23,13 +26,19 @@ class BootstrapPMMConfig(BaseClientModel):
     order_amount: Decimal = Field(0.01)
     bid_spread: Decimal = Field(0.001)
     ask_spread: Decimal = Field(0.001)
-    order_evaluation_time: int = Field(15)
+    order_evaluation_time: float = Field(15.0)
+    force_evaluation_cycle: bool = Field(False)
     price_type: str = Field("mid")
     order_spread_tolerance: Decimal = Field(0.001)
     levels: int = Field(3)
     randomize_order_amount: bool = Field(False)
+    replace_all_every_increment: bool = Field(False)  # Turn on replace all orders ever n seconds
+    replacement_increment : float = Field(10.0)  # Amount in seconds to have all orders be replaced.
+    replacement_delay : float = Field(1.5)  # Amount of time to wait between replacing each order
     random_order_floor: Decimal = Field(1)  # in quote currency (USDT)
     random_order_ceiling: Decimal = Field(2)  # in quote currency (USDT)
+    price_ceiling: Decimal = Field(2.0)
+    price_floor: Decimal = Field(0.5)
 
 
 class BootstrapPMM(ScriptStrategyBase):
@@ -43,7 +52,6 @@ class BootstrapPMM(ScriptStrategyBase):
     This ensures that there is always liquidity in the market.
     """
 
-    create_timestamp = 0
     price_source = PriceType.MidPrice
     _order_lvl_tracker = {}
 
@@ -52,13 +60,6 @@ class BootstrapPMM(ScriptStrategyBase):
         cls.markets = {config.exchange: {config.trading_pair}}
         cls.price_source = PriceType.LastTrade if config.price_type == "last" else PriceType.MidPrice
 
-    # @classmethod
-    # def load_config_from_file(cls, config_path: str) -> BootstrapPMMConfig:
-    #     """Load configuration from YAML file."""
-    #     with open(config_path, 'r') as file:
-    #         config_data = yaml.safe_load(file)
-    #     return BootstrapPMMConfig(**config_data)
-
     def __init__(self, connectors: Dict[str, ConnectorBase], config: BootstrapPMMConfig):
         super().__init__(connectors)
         self.config = config
@@ -66,8 +67,8 @@ class BootstrapPMM(ScriptStrategyBase):
 
         self.first_order_placed = False
 
-    def to_microseconds(self, timestamp: int) -> int:
-        return timestamp * 1000000
+    def is_order_out_of_desired_price(self, order: LimitOrder) -> bool:
+        return order.price < self.config.price_floor or order.price > self.config.price_ceiling
 
     def place_initial_orders(self):
         proposal = self.create_initial_proposal()
@@ -81,17 +82,29 @@ class BootstrapPMM(ScriptStrategyBase):
     def on_tick(self):
         # Create the initial proposal and place the orders
         if not self.first_order_placed:
-            self.create_timestamp = self.current_timestamp + self.to_microseconds(self.config.order_evaluation_time)
+            self.eval_target_timestamp = self.current_timestamp + self.config.order_evaluation_time
+            self.repl_target_timestamp = self.current_timestamp + self.config.replacement_increment
             self.place_initial_orders()
 
-        # On each tick, we should evaluate the orders and replace the orders if necessary.
-        if self.create_timestamp <= self.current_timestamp:
+        # On each tick, we should evaluate the orders and replace the orders if necessary. Do not run if we are replacing all orders every increment unless force_evaluation_cycle is True.
+        if self.eval_target_timestamp <= self.current_timestamp and (self.config.force_evaluation_cycle or not self.config.replace_all_every_increment):
             orders_to_replace : List[LimitOrder] = self.evaluate_orders()
             if orders_to_replace:
                 self.logger().info(f"Replacing {len(orders_to_replace)} orders")
                 self.logger().info(f"Orders to replace: {orders_to_replace}")
-                self.replace_orders(orders_to_replace)
-            self.create_timestamp =  self.current_timestamp + self.to_microseconds(self.config.order_evaluation_time)
+                self._replace_orders_with_delay(orders_to_replace)
+            self.eval_target_timestamp =  self.current_timestamp + self.config.order_evaluation_time
+
+        # On each tick, we should check if replacement_increment has passed
+        if self.repl_target_timestamp <= self.current_timestamp and self.config.replace_all_every_increment:
+            # Replace all orders if so
+            self.logger().info("Replacing all orders!")
+            self._replace_orders_with_delay(
+                sorted(self.get_active_orders(  # Sort so buys are ascending and sells are descending by price
+                    connector_name=self.config.exchange
+                ), key=lambda o: o.price if o.is_buy else -o.price)
+            )
+            self.repl_target_timestamp = self.current_timestamp + self.config.replacement_increment
 
     def get_order_amount(self) -> Decimal:
         """
@@ -129,16 +142,8 @@ class BootstrapPMM(ScriptStrategyBase):
         ref_price = self.connectors[self.config.exchange].get_price_by_type(self.config.trading_pair, self.price_source)
         proposal = []
         for level in range(1, self.config.levels + 1):
-            buy_amount = self.get_order_amount()
-            sell_amount = self.get_order_amount()
-            buy_price = self.calculate_order_price(TradeType.BUY, level)
-            sell_price = self.calculate_order_price(TradeType.SELL, level)
-            buy_order = OrderCandidate(trading_pair=self.config.trading_pair, is_maker=True, order_type=OrderType.LIMIT,
-                                       order_side=TradeType.BUY, amount=Decimal(buy_amount), price=buy_price)
-            sell_order = OrderCandidate(trading_pair=self.config.trading_pair, is_maker=True, order_type=OrderType.LIMIT,
-                                        order_side=TradeType.SELL, amount=Decimal(sell_amount), price=sell_price)
-            buy_order.level = level
-            sell_order.level = level
+            buy_order = self.create_new_candidate(TradeType.BUY, level)
+            sell_order = self.create_new_candidate(TradeType.SELL, level)
             proposal.extend([buy_order, sell_order])
 
         return proposal
@@ -195,18 +200,23 @@ class BootstrapPMM(ScriptStrategyBase):
         """
         orders = self.get_active_orders(connector_name=self.config.exchange)
         orders_to_replace = []
+        price_ref = self.connectors[self.config.exchange].get_price_by_type(self.config.trading_pair, self.price_source)
         for order in orders:
             if order.is_buy:
-                if order.price > self.connectors[self.config.exchange].get_price_by_type(
-                            order.trading_pair, self.price_source) * Decimal(1 - self.config.order_spread_tolerance):
+                if order.price < price_ref * Decimal(1 - self.config.order_spread_tolerance):
                     orders_to_replace.append(order)
             else:  # SELL
-                if order.price < self.connectors[self.config.exchange].get_price_by_type(
-                        order.trading_pair, self.price_source) * Decimal(1 + self.config.order_spread_tolerance):
+                if order.price > price_ref * Decimal(1 + self.config.order_spread_tolerance):
                     orders_to_replace.append(order)
         return orders_to_replace
 
-    def replace_orders(self, proposal: List[LimitOrder]) -> None:
+    def _replace_orders_with_delay(self, proposal: List[LimitOrder]) -> None:
+        """
+        Replace the orders in the proposal with new orders.
+        """
+        asyncio.create_task(self.replace_orders(proposal))
+
+    async def replace_orders(self, proposal: List[LimitOrder]) -> None:
         """
         Replace the orders in the proposal with new orders.
 
@@ -215,6 +225,8 @@ class BootstrapPMM(ScriptStrategyBase):
         """
         for order in proposal:
             self.replace_order(order)
+            # Delay between orders
+            await asyncio.sleep(self.config.replacement_delay)
 
     def replace_order(self, order: LimitOrder | OrderFilledEvent) -> None:
         """
@@ -253,9 +265,10 @@ class BootstrapPMM(ScriptStrategyBase):
             self.logger().warning(f"Some orders have been resized. Check balances. Insufficient funds likely.")
 
         for order in proposal:
-            self.place_order(connector_name=self.config.exchange, order=order)
+            if not self.place_order(connector_name=self.config.exchange, order=order):
+                break
 
-    def place_order(self, connector_name: str, order: OrderCandidate):
+    def place_order(self, connector_name: str, order: OrderCandidate) -> bool:
         """
         Place the order. This does not replace the order, but simply places it.
 
@@ -264,9 +277,17 @@ class BootstrapPMM(ScriptStrategyBase):
             order: OrderCandidate: The order to place.
         """
         self.logger().info(f"Placing order: OrderCandidate(side={order.order_side}, amount={order.amount}, price={order.price})")
+        if self.is_order_out_of_desired_price(order):
+            self.logger().warning(f"Order is out of desired price range, stopping market making.")
+            # TODO: Uncomment this when our smtp server is set up
+            # send_email_critical_issue(
+            #     f"Bootstrap PMM - {self.config.exchange} - {self.config.trading_pair} - Out of desired price range",
+            #     f"Order is out of desired price range, stopping market making.")
+            HummingbotApplication.main_application().stop()
+            return False
         if order.is_zero_order:
             self.logger().warning(f"Order is a zero order. Check balances. Insufficient funds likely.")
-            return
+            return False
         elif order.resized:
             self.logger().warning(f"Order has been resized to fit budget. Check balances. Insufficient funds likely.")
 
@@ -279,6 +300,8 @@ class BootstrapPMM(ScriptStrategyBase):
                                 amount=order.amount, order_type=order.order_type, price=order.price)
             self._order_lvl_tracker[order_id] = order.level
 
+        return True
+
     def cancel_all_orders(self):
         """
         Cancel all orders. This does not replace the orders, but simply cancels them.
@@ -287,6 +310,9 @@ class BootstrapPMM(ScriptStrategyBase):
             self.cancel(self.config.exchange, order.trading_pair, order.client_order_id)
 
     def did_fill_order(self, event: OrderFilledEvent):
+        """
+        Handle the order filled event. This will replace the order.
+        """
         msg = (f"{event.trade_type.name} {round(event.amount, 2)} {event.trading_pair} {self.config.exchange} at {round(event.price, 2)}")
         self.log_with_clock(logging.INFO, msg)
         self.notify_hb_app_with_timestamp(msg)
