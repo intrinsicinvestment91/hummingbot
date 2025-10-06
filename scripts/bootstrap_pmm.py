@@ -281,7 +281,7 @@ class BootstrapPMM(ScriptStrategyBase):
             order: OrderCandidate: The order to place.
         """
         self.logger().info(f"Placing order: OrderCandidate(side={order.order_side}, amount={order.amount}, price={order.price})")
-        if not self.is_order_out_of_desired_price(order):
+        if self.is_order_out_of_desired_price(order):
             self.logger().warning(f"Order is out of desired price range, stopping market making.")
             # TODO: Uncomment this when our smtp server is set up
             # send_email_critical_issue(
