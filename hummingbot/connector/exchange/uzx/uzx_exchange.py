@@ -313,18 +313,20 @@ class UzxExchange(ExchangePyBase):
                                 token=tracked_order.quote_asset
                             )]
                         )
-                        trade_update = TradeUpdate(
-                            trade_id=str(order_data.get(order_data["order_id"])),
-                            client_order_id=tracked_order.client_order_id,
-                            exchange_order_id=str(order_data["order_id"]),
-                            trading_pair=tracked_order.trading_pair,
-                            fee=fee,
-                            fill_base_amount=Decimal(order_data["filled_quote_amount"]) / Decimal(order_data["avg_price"]),
-                            fill_quote_amount=Decimal(order_data["filled_quote_amount"]),
-                            fill_price=Decimal(order_data["avg_price"]),
-                            fill_timestamp=order_data.get("updated_at", order_data["created_at"]),
-                        )
-                        self._order_tracker.process_trade_update(trade_update)
+                        self.logger().info(f"DEBUGGING: Trade update: {order_data}")
+                        if order_data.get("avg_price") is not None:
+                            trade_update = TradeUpdate(
+                                trade_id=str(order_data.get(order_data["order_id"])),
+                                client_order_id=tracked_order.client_order_id,
+                                exchange_order_id=str(order_data["order_id"]),
+                                trading_pair=tracked_order.trading_pair,
+                                fee=fee,
+                                fill_base_amount=Decimal(order_data.get("filled_quote_amount")) / Decimal(order_data.get("avg_price")),
+                                fill_quote_amount=Decimal(order_data.get("filled_quote_amount")),
+                                fill_price=Decimal(order_data.get("avg_price")),
+                                fill_timestamp=order_data.get("updated_at", order_data.get("created_at")),
+                            )
+                            self._order_tracker.process_trade_update(trade_update)
 
             except asyncio.CancelledError:
                 raise

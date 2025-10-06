@@ -59,7 +59,6 @@ class UzxAPIUserStreamDataSource(UserStreamTrackerDataSource):
         login_request: WSJSONRequest = WSJSONRequest(payload=payload)
         await ws.send(login_request)
         response : WSResponse = await ws.receive()
-        self.logger().info(f"DEBUGGING: Response: {response.data}")
         if response.data.get("status") == "success":
             self.logger().info("Successfully connected to user stream")
             return ws
@@ -112,7 +111,6 @@ class UzxAPIUserStreamDataSource(UserStreamTrackerDataSource):
     async def _process_event_message(
         self, event_message: Dict[str, Any], queue: asyncio.Queue, websocket_assistant: WSAssistant
     ):
-        self.logger().info(f"DEBUGGING: Processing event message: {event_message}")
         if len(event_message) > 0:
             if "ping" in event_message:  # Send pong response to ping
                 timestamp = event_message.get("ping")
