@@ -14,7 +14,7 @@ from hummingbot.connector.connector_base import ConnectorBase
 from hummingbot.core.data_type.common import OrderType, PriceType, TradeType
 from hummingbot.core.data_type.limit_order import LimitOrder
 from hummingbot.core.data_type.order_candidate import OrderCandidate
-from hummingbot.core.event.events import OrderFilledEvent
+from hummingbot.core.event.events import BuyOrderCompletedEvent, OrderFilledEvent, SellOrderCompletedEvent
 from hummingbot.logger.email_warning import send_email_critical_issue
 from hummingbot.strategy.script_strategy_base import ScriptStrategyBase
 
@@ -311,11 +311,28 @@ class BootstrapPMM(ScriptStrategyBase):
 
     def did_fill_order(self, event: OrderFilledEvent):
         """
-        Handle the order filled event. This will replace the order.
+        Handle the order filled event.
         """
         msg = (f"{event.trade_type.name} {round(event.amount, 2)} {event.trading_pair} {self.config.exchange} at {round(event.price, 2)}")
         self.log_with_clock(logging.INFO, msg)
         self.notify_hb_app_with_timestamp(msg)
 
-        # replace order
+    def did_complete_buy_order(self, event: BuyOrderCompletedEvent):
+        """
+        Called ONLY when a BUY order is COMPLETELY filled.
+        """
+        msg = f"BUY order COMPLETELY filled: {event.base_asset_amount} {event.base_asset}"
+        self.log_with_clock(logging.INFO, msg)
+        self.notify_hb_app_with_timestamp(msg)
+        # Replace order here - safe now!
+        self.replace_order(event)
+
+    def did_complete_sell_order(self, event: SellOrderCompletedEvent):
+        """
+        Called ONLY when a SELL order is COMPLETELY filled.
+        """
+        msg = f"SELL order COMPLETELY filled: {event.base_asset_amount} {event.base_asset}"
+        self.log_with_clock(logging.INFO, msg)
+        self.notify_hb_app_with_timestamp(msg)
+        # Replace order here - safe now!
         self.replace_order(event)
