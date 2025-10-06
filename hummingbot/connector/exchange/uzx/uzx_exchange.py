@@ -288,7 +288,7 @@ class UzxExchange(ExchangePyBase):
 
             try:
                 event_type = event_message.get("type")
-                if event_type == "order.spot" :
+                if event_type == "orderV2.spot" :
                  order_data = event_message.get("data")
                  if order_data and order_data.get("state") is not None:
                   tracked_order = self._order_tracker.all_updatable_orders_by_exchange_order_id.get(str(order_data["order_id"]))

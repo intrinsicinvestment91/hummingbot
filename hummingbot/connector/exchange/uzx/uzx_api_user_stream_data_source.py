@@ -81,7 +81,7 @@ class UzxAPIUserStreamDataSource(UserStreamTrackerDataSource):
                 payload={
                     "event": "sub",
                     "params": {
-                        "type": "order.spot",
+                        "type": "orderV2.spot",
                         "symbol": symbol,
                         "interval": "1min"
                     },
