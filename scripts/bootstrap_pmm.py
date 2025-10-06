@@ -319,11 +319,4 @@ class BootstrapPMM(ScriptStrategyBase):
         self.notify_hb_app_with_timestamp(msg)
 
         # replace order
-        asyncio.create_task(self.replace_order(event))
-
-    def stop(self):
-        """
-        Shutdown hummingbot.
-        """
-
-        HummingbotApplication.main_application().stop()
+        self.replace_order(event)
