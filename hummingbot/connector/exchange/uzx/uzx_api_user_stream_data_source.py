@@ -79,7 +79,7 @@ class UzxAPIUserStreamDataSource(UserStreamTrackerDataSource):
                         "biz": "market",
                         "type": "order.spot",
                         "symbol": symbol,
-                        "interval": "0"
+                        "interval": "1min"
                     },
                     "zip": False
                 }
