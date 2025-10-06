@@ -69,7 +69,21 @@ class UzxAPIUserStreamDataSource(UserStreamTrackerDataSource):
 
         :param websocket_assistant: the websocket assistant used to connect to the exchange
         """
-        pass
+        for trading_pair in self._trading_pairs:
+            symbol = await self._connector.exchange_symbol_associated_to_pair(trading_pair=trading_pair)
+            ws_request = WSJSONRequest(
+                payload={
+                    "event": "sub",
+                    "params": {
+                        "biz": "market",
+                        "type": "order.spot",
+                        "symbol": symbol,
+                        "interval": "0"
+                    },
+                    "zip": False
+                }
+            )
+            await websocket_assistant.send(ws_request)
 
     async def _on_user_stream_interruption(self, websocket_assistant: Optional[WSAssistant]):
         """
@@ -85,8 +99,19 @@ class UzxAPIUserStreamDataSource(UserStreamTrackerDataSource):
     async def _process_websocket_messages(self, websocket_assistant: WSAssistant, queue: asyncio.Queue):
         async for ws_response in websocket_assistant.iter_messages():
             data = ws_response.data
-            if "ping" in data:
-                pong_request = WSJSONRequest(payload={"pong" : data["ping"]})
+            if data is not None:  # data will be None when the websocket is disconnected
+                await self._process_event_message(
+                    event_message=data, queue=queue, websocket_assistant=websocket_assistant
+                )
+
+    async def _process_event_message(
+        self, event_message: Dict[str, Any], queue: asyncio.Queue, websocket_assistant: WSAssistant
+    ):
+        if len(event_message) > 0:
+            if "ping" in event_message:  # Send pong response to ping
+                timestamp = event_message.get("ping")
+                pong_payloads = {"pong": timestamp}
+                pong_request = WSJSONRequest(payload=pong_payloads)
                 await websocket_assistant.send(request=pong_request)
-            else:
-                queue.put_nowait(data)
+            elif event_message.get("type") == CONSTANTS.ORDER_CHANGE_EVENT_TYPE:
+                queue.put_nowait(event_message)
