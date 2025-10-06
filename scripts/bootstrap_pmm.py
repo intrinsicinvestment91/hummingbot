@@ -199,14 +199,13 @@ class BootstrapPMM(ScriptStrategyBase):
         """
         orders = self.get_active_orders(connector_name=self.config.exchange)
         orders_to_replace = []
+        price_ref = self.connectors[self.config.exchange].get_price_by_type(self.config.trading_pair, self.price_source)
         for order in orders:
             if order.is_buy:
-                if order.price > self.connectors[self.config.exchange].get_price_by_type(
-                            order.trading_pair, self.price_source) * Decimal(1 - self.config.order_spread_tolerance):
+                if order.price < price_ref * Decimal(1 - self.config.order_spread_tolerance):
                     orders_to_replace.append(order)
             else:  # SELL
-                if order.price < self.connectors[self.config.exchange].get_price_by_type(
-                        order.trading_pair, self.price_source) * Decimal(1 + self.config.order_spread_tolerance):
+                if order.price > price_ref * Decimal(1 + self.config.order_spread_tolerance):
                     orders_to_replace.append(order)
         return orders_to_replace
 
