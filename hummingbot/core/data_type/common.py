@@ -1,6 +1,11 @@
 from decimal import Decimal
 from enum import Enum
-from typing import Any, Callable, Generic, NamedTuple, Set, TypeVar, override
+from typing import Any, Callable, Generic, NamedTuple, Set, TypeVar
+try:
+    from typing import override  # py312+
+except Exception:
+    from typing_extensions import override  # py310 fallback
+
 
 from pydantic_core import core_schema
 
