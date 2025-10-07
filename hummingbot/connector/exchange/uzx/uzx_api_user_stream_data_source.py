@@ -8,7 +8,7 @@ from hummingbot.core.data_type.user_stream_tracker_data_source import UserStream
 from hummingbot.core.utils.async_utils import safe_ensure_future
 from hummingbot.core.web_assistant.connections.data_types import RESTMethod, WSJSONRequest
 from hummingbot.core.web_assistant.web_assistants_factory import WebAssistantsFactory
-from hummingbot.core.web_assistant.ws_assistant import WSAssistant
+from hummingbot.core.web_assistant.ws_assistant import WSAssistant, WSResponse
 from hummingbot.logger import HummingbotLogger
 
 if TYPE_CHECKING:
@@ -58,9 +58,13 @@ class UzxAPIUserStreamDataSource(UserStreamTrackerDataSource):
         payload = self._auth.get_ws_authenticate_payload(url)
         login_request: WSJSONRequest = WSJSONRequest(payload=payload)
         await ws.send(login_request)
-        self.logger().info("Successfully connected to user stream")
-
-        return ws
+        response : WSResponse = await ws.receive()
+        if response.data.get("status") == "success":
+            self.logger().info("Successfully connected to user stream")
+            return ws
+        else:
+            self.logger().error(f"Failed to connect to user stream: {response.data.get('error')}")
+            raise Exception(f"Failed to connect to user stream: {response.data.get('error')}")
 
     async def _subscribe_channels(self, websocket_assistant: WSAssistant):
         """
@@ -76,8 +80,7 @@ class UzxAPIUserStreamDataSource(UserStreamTrackerDataSource):
                 payload={
                     "event": "sub",
                     "params": {
-                        "biz": "market",
-                        "type": "order.spot",
+                        "type": "orderV2.spot",
                         "symbol": symbol,
                         "interval": "1min"
                     },

@@ -1,9 +1,10 @@
+from __future__ import annotations
+from decimal import Decimal, ROUND_FLOOR, ROUND_HALF_UP
 import asyncio
 import os
 import uuid
 import json
 import time
-from decimal import Decimal, ROUND_FLOOR, ROUND_HALF_UP
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from bidict import bidict
@@ -232,7 +233,6 @@ class UzxExchange(ExchangePyBase):
         return DeductedFromReturnsTradeFee(percent=self.estimate_fee_pct(is_maker))
 
     def _best_bbo(self, trading_pair):
-        from decimal import Decimal
         try:
             tracker = getattr(self, "_order_book_tracker", None)
             if tracker and getattr(tracker, "order_books", None):
@@ -506,7 +506,6 @@ class UzxExchange(ExchangePyBase):
 
         # --- IOC taker-limit transform ---
         if self._enable_ioc_cap and order_type is OrderType.MARKET and self._ioc_slippage_bps > 0:
-            from decimal import Decimal
             # compute cap price from best-of-book
             best_bid, best_ask = self._best_bbo(trading_pair)
             if best_bid is None or best_ask is None:
@@ -538,7 +537,7 @@ class UzxExchange(ExchangePyBase):
         # --- end IOC transform ---
 
         # ensure original MARKET path applies configured semantics
-        if order_type is OrderType.LIMIT or order_type is OrderType.LIMIT_MAKER:
+        if (order_type is OrderType.LIMIT or order_type is OrderType.LIMIT_MAKER) and "price" not in api_params:
             price_str = f"{price:f}"
             api_params["price"] = price_str
         if order_type is OrderType.MARKET:
@@ -562,7 +561,7 @@ class UzxExchange(ExchangePyBase):
         # IMPORTANT: round to exchange steps
         amount, price = self._apply_exchange_rounding(
             trading_pair=trading_pair,
-            amount=Decimal(str(amount)),
+            amount=Decimal(str(api_params["amount"])) if is_quote_amount else Decimal(str(amount)),
             price=Decimal(str(price)) if not price.is_nan() else price,
             order_type=order_type,
             is_quote_amount=is_quote_amount
@@ -570,7 +569,7 @@ class UzxExchange(ExchangePyBase):
 
         # Now stringify with the rounded values
         api_params["amount"] = f"{amount:f}"
-        if order_type is OrderType.LIMIT or order_type is OrderType.LIMIT_MAKER:
+        if (order_type is OrderType.LIMIT or order_type is OrderType.LIMIT_MAKER) and "price" not in api_params:
             api_params["price"] = f"{price:f}"
 
         # right before the POST:
