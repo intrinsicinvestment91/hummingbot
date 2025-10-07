@@ -240,6 +240,23 @@ class BootstrapPMM(ScriptStrategyBase):
         amount = order.quantity if isinstance(order, LimitOrder) else order.amount
         trading_pair = order.trading_pair
         price = order.price
+
+        if order_id not in self._order_lvl_tracker:
+            self.logger().warning(f"Order {order_id} not found in level tracker. Skipping replacement.")
+            return
+
+        if order_side not in [TradeType.BUY, TradeType.SELL]:
+            self.logger().warning(f"Order {order_id} has invalid side. Skipping replacement.")
+            return
+
+        if amount is None or amount == 0:
+            self.logger().warning(f"Order {order_id} has invalid amount. Skipping replacement.")
+            return
+
+        if price is None or price == 0:
+            self.logger().warning(f"Order {order_id} has invalid price. Skipping replacement.")
+            return
+
         level = self._order_lvl_tracker[order_id]
 
         self.logger().info(f"Replacing LimitOrder(id={order_id}, side={order_side}, amount={amount}, price={price})")
