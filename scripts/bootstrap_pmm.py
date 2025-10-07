@@ -202,6 +202,9 @@ class BootstrapPMM(ScriptStrategyBase):
         orders_to_replace = []
         price_ref = self.connectors[self.config.exchange].get_price_by_type(self.config.trading_pair, self.price_source)
         for order in orders:
+            if order.client_order_id not in self._order_lvl_tracker:
+                self.logger().warning(f"Order {order.client_order_id} not found in level tracker. Skipping evaluation.")
+                continue
             if order.is_buy:
                 if order.price < price_ref * Decimal(1 - self.config.order_spread_tolerance):
                     orders_to_replace.append(order)
