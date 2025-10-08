@@ -231,18 +231,23 @@ class BootstrapPMM(ScriptStrategyBase):
             # Delay between orders
             await asyncio.sleep(self.config.replacement_delay)
 
-    def replace_order(self, order: LimitOrder | OrderFilledEvent) -> None:
+    def replace_order(self, order: LimitOrder | BuyOrderCompletedEvent | SellOrderCompletedEvent) -> None:
         """
         Replace the order with a new order.
 
         Args:
-            order: LimitOrder | OrderFilledEvent: The order to replace.
+            order: LimitOrder | BuyOrderCompletedEvent | SellOrderCompletedEvent: The order to replace.
         """
-        order_id = order.client_order_id if isinstance(order, LimitOrder) else order.order_id
-        order_side = (TradeType.BUY if order.is_buy else TradeType.SELL) if isinstance(order, LimitOrder) else order.trade_type
-        amount = order.quantity if isinstance(order, LimitOrder) else order.amount
-        trading_pair = order.trading_pair
-        price = order.price
+        if isinstance(order, LimitOrder):
+            order_side = TradeType.BUY if order.is_buy else TradeType.SELL
+            order_id = order.client_order_id
+            amount = order.quantity
+            price = order.price
+        else:  # BuyOrderCompletedEvent or SellOrderCompletedEvent
+            order_side = TradeType.BUY if isinstance(order, BuyOrderCompletedEvent) else TradeType.SELL
+            order_id = order.order_id
+            amount = order.base_asset_amount
+            price = order.quote_asset_amount / order.base_asset_amount
 
         if order_id not in self._order_lvl_tracker:
             self.logger().warning(f"Order {order_id} not found in level tracker. Skipping replacement.")
@@ -264,7 +269,7 @@ class BootstrapPMM(ScriptStrategyBase):
 
         self.logger().info(f"Replacing LimitOrder(id={order_id}, side={order_side}, amount={amount}, price={price})")
         if isinstance(order, LimitOrder):  # Cancel only if the order hasn't been filled
-            self.cancel(self.config.exchange, trading_pair, order_id)
+            self.cancel(self.config.exchange, self.config.trading_pair, order_id)
         # Remove old order from level tracker
         del self._order_lvl_tracker[order_id]
 
