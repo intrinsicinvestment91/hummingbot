@@ -38,18 +38,11 @@ TIME_IN_FORCE_GTC = "GTC"  # Good till cancelled
 TIME_IN_FORCE_IOC = "IOC"  # Immediate or cancel
 TIME_IN_FORCE_FOK = "FOK"  # Fill or kill
 
-# WS event types
-ORDER_CHANGE_EVENT_TYPE = "orderV2.spot"
-
-
 # Rate Limit Type
 REQUEST_WEIGHT = "REQUEST_WEIGHT"
 ORDERS = "ORDERS"
 ORDERS_24HR = "ORDERS_24HR"
 RAW_REQUESTS = "RAW_REQUESTS"
-
-# Amount of time to wait while cancelling all orders
-CANCEL_ALL_TIMEOUT = 600
 
 # Rate Limit time intervals
 ONE_MINUTE = 60
