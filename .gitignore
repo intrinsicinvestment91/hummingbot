@@ -2,6 +2,7 @@
 .\#*
 \#*\#
 atlassian-ide-plugin.xml
+*.bak
 /build
 # Cert files
 /certs
@@ -26,6 +27,7 @@ crashlytics.properties
 # Debug console
 .debug_console_ssh_host_key
 debug.log
+# dev only
 /dist
 # Distribution files
 # Documentation build dir
@@ -35,6 +37,7 @@ debug.log
 # emacs files
 emails.txt
 .env
+env/
 # External SDK files
 fabric.properties
 ## File-based project format:
@@ -56,6 +59,7 @@ fabric.properties
 # JIRA plugin
 *.key
 # Local files
+# local venv
 *.log
 # misc
 /notebooks
@@ -65,15 +69,15 @@ fabric.properties
 portfolio_value.csv
 *.pyc
 __pycache__
+__pycache__/
 /**/*.pyd
+.pytest_cache/
 # Reference: https://intellij-support.jetbrains.com/hc/en-us/articles/206544839
 /**/*.so
 /src
 *.srl
 /test/**/*.cpp
+.venv/
 .vscode/
 # VSCode
 *.whl
-
-# local venv
-.venv/
